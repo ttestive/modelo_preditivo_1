@@ -1,8 +1,4 @@
-import streamlit as st
-import pandas as pd
 import sklearn
-
-
 import streamlit as st
 import pandas as pd
 import seaborn as sns
@@ -16,38 +12,60 @@ from sklearn.metrics import classification_report, confusion_matrix, roc_auc_sco
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("C:/Users/estevao.maia/Documents/Modelo preditivo/Bronze/UCI_Credit_Card.csv")
+    df = pd.read_csv("/home/estevaolins/Documentos/modelo_preditivo_1/UCI_Credit_Card.csv")
     df.columns = df.columns.str.strip()
+    return df
+
+def remove_outliers_iqr(df, columns):
+    for col in columns:
+        Q1 = df[col].quantile(0.25)
+        Q3 = df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
+        df = df[(df[col] >= lower) & (df[col] <= upper)]
     return df
 
 df = load_data()
 st.title("Análise de Inadimplência de Crédito")
 
 st.header("Análise Exploratória")
-if st.checkbox("Mostrar estatísticas descritivas"):
-    st.write(df.describe())
+
 
 if st.checkbox("Mostrar histogramas"):
-    col = st.selectbox("Escolha uma coluna numérica:", df.select_dtypes(include='number').columns)
+    notcol = df[["ID", "LIMIT_BAL", "SEX", "EDUCATION", "MARRIAGE", "AGE"]]
+    num_cols = df.select_dtypes(include='number').columns
+    filtered_cols = [col for col in num_cols if col not in notcol.columns]
+    col = st.selectbox("Escolha uma coluna numérica:", filtered_cols)
     fig, ax = plt.subplots()
     sns.histplot(df[col], kde=True, ax=ax)
     st.pyplot(fig)
 
+notcol = ["ID", "LIMIT_BAL", "SEX", "EDUCATION", "MARRIAGE", "AGE"]
+numeric_cols = [col for col in df.select_dtypes(include='number').columns if col not in notcol]
+filtered_df = df[numeric_cols]
+
 if st.checkbox("Mostrar boxplot"):
     fig, ax = plt.subplots()
-    sns.boxplot(data=df.select_dtypes(include='number'), ax=ax)
+    sns.boxplot(data=filtered_df, ax=ax)
     plt.xticks(rotation=90)
     st.pyplot(fig)
 
 if st.checkbox("Mostrar correlação"):
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(df.corr(), cmap="coolwarm", annot=False, ax=ax)
+    sns.heatmap(filtered_df.corr(), cmap="coolwarm", annot=False, ax=ax)
     st.pyplot(fig)
 
 st.header("Pré-processamento")
 
-X = df.drop(columns=['ID', 'default.payment.next.month'])
-y = df['default.payment.next.month']
+numeric_cols = df.select_dtypes(include='number').columns
+cols_for_outlier_removal = [col for col in numeric_cols if col not in ["ID", "default.payment.next.month"]]
+df = remove_outliers_iqr(df, cols_for_outlier_removal)
+
+categorical_cols = ["SEX", "EDUCATION", "MARRIAGE"]
+X = df.drop(columns=["ID", "default.payment.next.month"])
+X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
+y = df["default.payment.next.month"]
 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
